@@ -1,0 +1,2 @@
+*.o
+.makefile-mini/
