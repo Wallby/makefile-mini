@@ -342,7 +342,7 @@ $(MM_ga):$(MM_gb) $(MM_gc)
 endef
 
 # NOTE: $(1) == .o_FROM_.c
-define mm_clean_.o_FROM_.c=
+define mm_clean_.o_from_.c=
 $(call MM_RM,$(1))
 endef
 
