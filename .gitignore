@@ -1,2 +1,6 @@
-*.o
 .makefile-mini/
+*.spv
+*.spv.h
+*.o
+*.lib
+*.dll
