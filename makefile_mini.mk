@@ -367,7 +367,7 @@ endef
 
 # NOTE: $(1) == binary
 # NOTE: assumes $(1) does not start with .makefile-mini/
-mm_is_binary_ignored=$(if $(call mm_filter_using_patterns,$(MM_IGNOREDBINARIES_PATTERNS),$(1)),1,0)
+mm_is_binary_ignored=$(if $(MM_IGNOREDBINARIES_PATTERNS),$(if $(call mm_filter_using_patterns,$(MM_IGNOREDBINARIES_PATTERNS),$(1)),1,0),0)
 
 # NOTE: $(1) == binary
 mm_get_binaryfilepath_from_binary=$(if $(filter 1,$(call mm_is_binary_ignored,$(1))),.makefile-mini/$(1),$(1))
