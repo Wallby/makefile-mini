@@ -3,7 +3,7 @@ include makefile_mini.mk
 
 
 $(call mm_start_parameters_t,a)
-a.ignoredbinaries:=^liblibrarytest$(MM_STATICLIBRARY_EXTENSION)$$
+a.ignoredbinaries:=^testexecutabletest$(MM_EXECUTABLE_EXTENSION)$$
 # ^
 # $$ as otherwise will be escaped here
 $(call mm_start,a)
@@ -54,14 +54,50 @@ h.filetypes:=$(EMMLibraryfiletype_All)
 h.c:=staticlibrarytest.c sharedlibrarytest.c
 $(call mm_add_library,librarytest,h)
 
+$(call mm_add_executable_parameters_t,i)
+#i.additionalfiletypes:=
+# ^
+# default
+i.c:=executabletest.c
+#i.libraries:=staticlibrarytest sharedlibrary-mini:
+i.libraries:=staticlibrarytest sharedlibrarytest
+#i.sharedlibraries:=librarytest
+# ^
+# wouldn't work here as librarytest also includes staticlibrarytest again?,..
+# .. other than that i.libraries:=librarytest would be invalid because..
+# .. ambiguous whether to include static/shared
+i.hFolders:=../sharedlibrary-mini/
+i.lib:=sharedlibrary-mini
+i.libFolders:=../sharedlibrary-mini/
+$(call mm_add_executable,executabletest,i)
+
+$(call mm_add_executable_parameters_t,j)
+j.c:=testexecutabletest.c
+#j.libraries:=test-mini:
+j.hFolders:=../test-mini/
+j.lib:=test-mini
+j.libFolders:=../test-mini/
+j.gcc:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
+# ^
+# for sanity.. suffices to read documentation of each library used to figure..
+# .. out what (if anything) to specify here
+$(call mm_add_executable,testexecutabletest,j)
+
+#*********************************** tests ************************************
+
+$(call mm_add_test_parameters_t,k)
+k.executables:=testexecutabletest
+k.scripts=testscripttest
+$(call mm_add_test,test,k)
+
 #******************************************************************************
 
-$(call mm_stop_parameters_t,i)
-i.releasetypes:=EMMReleasetype_Zip
-#i.releasetypes:=EMMReleasetype_Zip EMMReleasetype_Installer
-i.ifRelease.ignoredbinaries:=^liblibrarytest$(MM_SHAREDLIBRARY_EXTENSION)$$
-i.ifRelease.ifZip.additionalfiles:=.txt$$ .md$$
+$(call mm_stop_parameters_t,l)
+l.releasetypes:=EMMReleasetype_Zip
+#l.releasetypes:=EMMReleasetype_Zip EMMReleasetype_Installer
+l.ifRelease.ignoredbinaries:=^liblibrarytest$(MM_SHAREDLIBRARY_EXTENSION)$$
+l.ifRelease.ifZip.additionalfiles:=.txt$$ .md$$
 # ^
 # additionally include every .txt and .md file in .zip
-#i.ifRelease.ifInstaller.additionalfiles:=
-$(call mm_stop,i)
+#l.ifRelease.ifInstaller.additionalfiles:=
+$(call mm_stop,l)

@@ -1,3 +1,17 @@
+# usage..
+# make #< default target makes all not ignored binaries
+# make test #< make all test(s) if any and run them
+# make release
+# # ^
+# # 1. make all not ignored binaries + make test(s) if any
+# # 2. run test(s) if any and only continue if all test(s) passed
+# # 3. make any releasetype(s) specified
+# make clean #< clean all binaryparts and binaries
+#
+# rules..
+# .. for paths use / only never \, if required (only if required)..
+#    .. makefile-mini will automatically replace / with \
+#
 # terminology..
 # .. project <- this Makefile
 # .. resource <- e.g. for mm_add_library a library is a resource
@@ -7,6 +21,7 @@
 # .. binary <- e.g. for $(call mm_add_library,staticlibrarytest,<..>)..
 #    .. libstaticlibrarytest.<lib/a> is a binary
 # .. library <- static|shared
+# .. executable <- <no extension>/.exe, optionally.. portable (.AppImage/.exe)
 # .. installer <- <.deb/.snap>/.msi
 #
 # projectname.. e.g. for myproject/makefile_mini.mk included by..
@@ -79,21 +94,33 @@ MM_PERCENT:=%
 
 ifndef OS #< linux
 MM_OS:=linux
+
+MM_FOLDER_SEPARATOR:=/
 MM_STATICLIBRARY_EXTENSION:=.a
 MM_SHAREDLIBRARY_EXTENSION:=.so
+MM_EXECUTABLE_EXTENSION:=
+MM_SCRIPT_EXTENSION:=
+MM_PORTABLEEXECUTABLE_EXTENSION:=.AppImage
 MM_RELEASEINSTALLER_EXTENSIONS:=.deb .snap
+
 
 MM_CLI_DEV_NULL:=/dev/null
 else ifeq ($(OS), Windows_NT) #< windows
 MM_OS:=windows
+
+MM_FOLDER_SEPARATOR:=\$(MM_EMPTY)
 MM_STATICLIBRARY_EXTENSION:=.lib
 MM_SHAREDLIBRARY_EXTENSION:=.dll
+MM_EXECUTABLE_EXTENSION:=.exe
+MM_SCRIPT_EXTENSION:=.bat
+MM_PORTABLEEXECUTABLE_EXTENSION:=.exe
 MM_RELEASEINSTALLER_EXTENSIONS:=.msi
 
 MM_CLI_DEV_NULL:=NUL
 else
 $(error os not supported)
 endif
+MM_EXECUTABLE_EXTENSION_OR_DOT:=$(if $(MM_EXECUTABLE_EXTENSION),$(MM_EXECUTABLE_EXTENSION),.)
 
 ifndef OS #< linux
 mm_cli_mkdir=mkdir $(1)
@@ -335,6 +362,12 @@ MM_STATICSHADER_PATTERN:=.*.spv.h
 MM_SHADER_PATTERNS:=$(MM_SHAREDSHADER_PATTERN) $(MM_STATICSHADER_PATTERN)
 MM_STATICLIBRARY_PATTERNS:=.*lib.*$(MM_STATICLIBRARY_EXTENSION)
 MM_SHAREDLIBRARY_PATTERNS:=.*lib.*$(MM_SHAREDLIBRARY_EXTENSION)
+ifndef OS #< linux
+# NOTE: [^/\\\.\n] not required as filepath cannot contain newline
+MM_EXECUTABLE_PATTERNS:=.*[/\\][^/\\\.]+ [^/\\\.]+
+else
+MM_EXECUTABLE_PATTERNS:=.*.exe
+endif
 
 # NOTE: $(1) == variablename
 define mm_start_parameters_t=
@@ -575,8 +608,67 @@ endef
 
 MM_INFO_PER_O_FROM_C:=
 
+#********************************** checks ***********************************
+
+# NOTE: $(1) == functionname
+#       $(2) == lib
+define mm_check_lib=
+$(eval mm_check_lib_invalidLib:=)
+$(foreach mm_check_lib_lib,$(2),\
+	$(if $(findstring .,$(mm_check_lib_lib)),\
+		$(eval mm_check_lib_invalidLib+=$(mm_check_lib_lib))\
+	)\
+)
+$(if $(mm_check_lib_invalidLib),\
+	$(error $(2).lib contains invalid value(s) $(mm_check_lib_invalidLib) in $(1))\
+,)
+endef
+
+#******************************************************************************
+
+# NOTE: $(1) == functionname
+#       $(2) == .hFolders
+#       $(3) == .gcc
+#       $(4) == .o
+define mm_add_o_from_c=
+$(foreach mm_add_o_from_c_o,$(4),\
+	$(if $(OS),\
+		$(eval mm_add_o_from_c_c:=$(basename $(mm_add_o_from_c_o)).c),\
+		$(eval mm_add_o_from_c_c:=$(basename $(basename $(mm_add_o_from_c_o))).c)\
+	)\
+	$(eval mm_add_o_from_c_bIsOFromC:=0)\
+	$(foreach mm_add_o_from_c_infoAboutOFromC,$(MM_INFO_PER_O_FROM_C),\
+		$(if $(filter $($(mm_add_o_from_c_infoAboutOFromC).o),$(mm_add_o_from_c_o)),\
+			$(if $(filter 0,$(call mm_equals,$($(mm_add_o_from_c_infoAboutOFromC).hFolders),$(2))),\
+				$(error $(mm_add_o_from_c_o) required more than once but with different hFolders value in $(1))\
+			,)\
+			$(if $(filter 0,$(call mm_equals,$($(mm_add_o_from_c_infoAboutOFromC).gcc),$(3))),\
+				$(error $(mm_add_o_from_c_o) required more than once but with different gcc value in $(1))\
+			,)\
+			$(eval mm_add_o_from_c_bIsOFromC:=1)\
+		,)\
+	)\
+	$(if $(filter 0,$(mm_add_o_from_c_bIsOFromC)),\
+		$(call mm_add_or_append_one_element,MM_INFO_PER_O_FROM_C)\
+		$(eval mm_add_o_from_c_infoAboutOFromC:=$(lastword $(MM_INFO_PER_O_FROM_C)))\
+		$(call mm_info_about_o_from_c_t,$(mm_add_o_from_c_infoAboutOFromC))\
+		$(eval $(mm_add_o_from_c_infoAboutOFromC).c:=$(mm_add_o_from_c_c))\
+		$(eval $(mm_add_o_from_c_infoAboutOFromC).hFolders:=$(2))\
+		$(eval $(mm_add_o_from_c_infoAboutOFromC).gcc:=$(3))\
+		$(if $(OS),,\
+			$(eval $(mm_add_o_from_c_infoAboutOFromC).gcc+=-fpic -visibility=hidden)\
+		)\
+		$(eval $(mm_add_o_from_c_infoAboutOFromC).o:=$(mm_add_o_from_c_o))\
+		$(call mm_add_binarypart,$(mm_add_o_from_c_o))\
+	,)\
+)
+endef
+
 #********************************** library ***********************************
 
+# NOTE: library and shaderlibrary are separate as every library can be built..
+#       .. from the same files and every shaderlibrary can be built from the..
+#       .. same files
 EMMLibraryfiletype:=EMMLibraryfiletype_Static EMMLibraryfiletype_Shared
 EMMLibraryfiletype_All:=$(EMMLibraryfiletype)
 
@@ -590,11 +682,8 @@ $(eval $(1).hFolders:=)
 $(eval $(1).lib:=)
 $(eval $(1).libFolders:=)
 $(eval $(1).libraries:=)
+$(eval $(1).cGcc:=)
 $(eval $(1).gcc:=)
-$(eval $(1).windows.lib:=)
-$(eval $(1).windows.dll:=)
-$(eval $(1).linux.a:=)
-$(eval $(1).linux.so:=)
 endef
 # NOTE: ^
 #       .filetypes == empty (i.e. .h only) or one or multiple of..
@@ -614,7 +703,6 @@ endef
 define mm_info_about_library_t=
 $(eval $(1).name:=)
 $(eval $(1).filetypes:=)
-$(eval $(1).c:=)
 $(eval $(1).o:=)
 $(eval $(1).staticO:=)
 $(eval $(1).sharedO:=)
@@ -624,14 +712,10 @@ $(eval $(1).libFolders:=)
 $(eval $(1).libraries:=)
 $(eval $(1).gcc:=)
 $(if $(OS),\
-	$(eval $(1).windows.lib:=)\
-	$(eval $(1).windows.dll:=)\
-	$(eval $(1).windows.filepathPerLib:=)\
-	$(eval $(1).windows.filepathPerDll:=),\
-	$(eval $(1).linux.a:=)\
-	$(eval $(1).linux.so:=)\
-	$(eval $(1).linux.filepathPerA:=)\
-	$(eval $(1).linux.filepathPerSo:=)\
+	$(eval $(1).windows.libfilepath:=)\
+	$(eval $(1).windows.dllfilepath:=),\
+	$(eval $(1).linux.afilepath:=)\
+	$(eval $(1).linux.sofilepath:=)\
 )
 endef
 # NOTE: ^
@@ -641,8 +725,12 @@ endef
 #                    if linux.. == compiled w. -fpic -fvisibility=hidden
 #       .o == if windows.. .o from .c
 #             if linux.. <.staticO> <.sharedO>
+#       .windows.<lib/dll>filepath == filepath to <.lib/.dll> binary
+#       .linux.<a/so>filepath == filepath to <.a/.so> binary
 
 MM_INFO_PER_LIBRARY:=
+
+MM_LIBRARIES:=
 
 #*********************************** checks ***********************************
 
@@ -656,13 +744,8 @@ $(call mm_check_if_defined,$(1),$(2).hFolders)
 $(call mm_check_if_defined,$(1),$(2).lib)
 $(call mm_check_if_defined,$(1),$(2).libFolders)
 $(call mm_check_if_defined,$(1),$(2).libraries)
+$(call mm_check_if_defined,$(1),$(2).cGcc)
 $(call mm_check_if_defined,$(1),$(2).gcc)
-$(if $(OS),\
-	$(call mm_check_if_defined,$(1),$(2).windows.lib)\
-	$(call mm_check_if_defined,$(1),$(2).windows.dll),\
-	$(call mm_check_if_defined,$(1),$(2).linux.a)\
-	$(call mm_check_if_defined,$(1),$(2).linux.so)\
-)
 
 $(if $($(2).filetypes),
 	$(call mm_check_if_valid_values,$(1),$(EMMLibraryfiletype_All),$(2).filetypes)\
@@ -670,15 +753,11 @@ $(if $($(2).filetypes),
 	$(call mm_check_if_valid_values,$(1),%.c,$(2).c),\
 	$(if $($(2).c),$(error if $(2).filetypes is empty.. $(2).c must be empty in $(1)),)\
 	$(if $($(2).h),,$(error if $(2).filetypes is empty.. $(2).h may not be empty in $(1)))\
+	$(if $($(2).cGcc),$(error if $(2).filetypes is empty.. $(2).cGcc must be empty in $(1)),)\
 	$(if $($(2).gcc),$(error if $(2).filetypes is empty.. $(2).gcc must be empty in $(1)),)\
 )
 $(call mm_check_if_valid_values,$(1),%.h,$(2).h)
-$(if $(OS),\
-	$(call mm_check_if_valid_values,$(1),%.lib,$(2).windows.lib)\
-	$(call mm_check_if_valid_values,$(1),%.dll,$(2).windows.dll),\
-	$(call mm_check_if_valid_values,$(1),%.a,$(2).linux.a)\
-	$(call mm_check_if_valid_values,$(1),%.so,$(2).linux.so)\
-)
+$(call mm_check_lib,$(1),$(2).lib)
 endef
 # TODO: ^
 #       implement .h, .lib, .libFolders, .windows.*, .linux.*
@@ -700,7 +779,6 @@ $(eval mm_add_library_infoAboutLibrary:=$(lastword $(MM_INFO_PER_LIBRARY)))
 $(call mm_info_about_library_t,$(mm_add_library_infoAboutLibrary))
 $(eval $(mm_add_library_infoAboutLibrary).name:=$(1))
 $(eval $(mm_add_library_infoAboutLibrary).filetypes:=$($(2).filetypes))
-$(eval $(mm_add_library_infoAboutLibrary).c:=$($(2).c))
 $(if $(OS),\
 	$(eval $(mm_add_library_infoAboutLibrary).o:=$(addsuffix .o,$(basename $($(2).c))))\
 	$(eval $(mm_add_library_infoAboutLibrary).staticO:=$($(mm_add_library_infoAboutLibrary).o))
@@ -715,42 +793,204 @@ $(if $(OS),\
 		$(eval $(mm_add_library_infoAboutLibrary).o+=$($(mm_add_library_infoAboutLibrary).sharedO))\
 	,)\
 )
-$(foreach mm_add_library_o,$($(mm_add_library_infoAboutLibrary).o),\
-	$(if $(OS),\
-		$(eval mm_add_library_c:=$(basename $(mm_add_library_o)).c),\
-		$(eval mm_add_library_c:=$(basename $(basename $(mm_add_library_o))).c)\
-	)\
-	$(eval mm_add_library_bIsOFromC:=0)\
-	$(foreach mm_add_library_infoAboutOFromC,$(MM_INFO_PER_O_FROM_C),\
-		$(if $(filter $($(mm_add_library_infoAboutOFromC).o),$(mm_add_library_o)),\
-			$(if $(filter 0,$(call mm_equals,$($(mm_add_library_infoAboutOFromC).gcc),$($(2).gcc))),\
-				$(error $(mm_add_library_o) required more than once but with different gcc value in $(0))\
-			,)\
-			$(if $(filter 0,$(call mm_equals,$($(mm_add_library_infoAboutOFromC).hFolders),$($(2).hFolders))),\
-				$(error $(mm_add_library_o) required more than once but with different hFolders value in $(0))\
-			,)\
-			$(eval mm_add_library_bIsOFromC:=1)\
-		,)\
-	)\
-	$(if $(filter 0,$(mm_add_library_bIsOFromC)),\
-		$(call mm_add_or_append_one_element,MM_INFO_PER_O_FROM_C)\
-		$(eval mm_add_library_infoAboutOFromC:=$(lastword $(MM_INFO_PER_O_FROM_C)))\
-		$(call mm_info_about_o_from_c_t,$(mm_add_library_infoAboutOFromC))\
-		$(eval $(mm_add_library_infoAboutOFromC).c:=$(mm_add_library_c))\
-		$(eval $(mm_add_library_infoAboutOFromC).hFolders:=$($(2).hFolders))\
-		$(if $(OS),,\
-			$(eval $(mm_add_library_infoAboutOFromC).gcc:=$($(2).gcc) -fpic -visibility=hidden)\
-		)\
-		$(eval $(mm_add_library_infoAboutOFromC).o:=$(mm_add_library_o))\
-		$(call mm_add_binarypart,$(mm_add_library_o))\
-	,)\
-)
+$(call mm_add_o_from_c,$(0),$($(2).hFolders),$($(2).cGcc),$($(mm_add_library_infoAboutLibrary).o))
 $(if $(filter EMMLibraryfiletype_Static,$($(2).filetypes)),\
-	$(call mm_add_binary,lib$(1)$(MM_STATICLIBRARY_EXTENSION),$(mm_add_library_infoAboutLibrary).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION))\
+	$(call mm_add_binary,lib$(1)$(MM_STATICLIBRARY_EXTENSION),$(mm_add_library_infoAboutLibrary).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath)\
 ,)
 $(if $(filter EMMLibraryfiletype_Shared,$($(2).filetypes)),\
-	$(call mm_add_binary,lib$(1)$(MM_SHAREDLIBRARY_EXTENSION),$(mm_add_library_infoAboutLibrary).$(MM_OS)$(MM_SHAREDLIBRARY_EXTENSION))\
+	$(call mm_add_binary,lib$(1)$(MM_SHAREDLIBRARY_EXTENSION),$(mm_add_library_infoAboutLibrary).$(MM_OS)$(MM_SHAREDLIBRARY_EXTENSION)filepath)\
 ,)
+$(eval MM_LIBRARIES+=$(1))
+endef
+
+#********************************* executable *********************************
+
+# NOTE: default executablefiletype is..
+#       .. if windows.. .exe
+#       .. if linux.. <empty>
+# NOTE: additionalexecutablefiletypes..
+#       .. portable -> .exe/.AppImage
+EMMAdditionalexecutablefiletype:=EMMAdditionalexecutablefiletype_Portable
+EMMAdditionalexecutablefiletype_All:=$(EMMAdditionalexecutablefiletype)
+
+define mm_add_executable_parameters_t
+$(eval $(1).additionalfiletypes:=)
+$(eval $(1).c:=)
+$(eval $(1).hFolders:=)
+$(eval $(1).lib:=)
+$(eval $(1).libFolders:=)
+$(eval $(1).libraries:=)
+$(eval $(1).staticlibraries:=)
+$(eval $(1).sharedlibraries:=)
+$(eval $(1).cGcc:=)
+$(eval $(1).gcc:=)
+endef
+
+define mm_info_about_executable_t=
+$(eval $(1).name:=)
+$(eval $(1).additionalfiletypes:=)
+$(eval $(1).o:=)
+$(eval $(1).lib:=)
+$(eval $(1).libFolders:=)
+$(eval $(1).libraries:=)
+$(eval $(1).staticlibraries:=)
+$(eval $(1).sharedlibraries:=)
+$(eval $(1).gcc:=)
+$(if $(OS),\
+	$(eval $(1).windows.exefilepath:=),\
+	$(eval $(1).linux.filepath:=)\
+	$(eval $(1).linux.AppImagefilepath:=)
+)
+endef
+# NOTE: ^
+#       .linux.filepath == filepath to executable without extension (<no..
+#       .. extension>)
+#       .linux.AppImagefilepath == exception to "appimagefilepath" for..
+#       .. consistency
+
+MM_INFO_PER_EXECUTABLE:=
+
+#*********************************** checks ***********************************
+
+# NOTE: $(1) == functionname
+#       $(2) == resourcetype plural
+#       $(3) == RESOURCETYPE plural
+#       $(4) == resources variablename
+define mm_check_resources=
+$(eval mm_check_resources_a:=$(filter-out $(MM_$(3)),$($(4))))
+$(if $(mm_check_resources_a),$(error $(3) contains element(s) that aren't $(2) in $(1)) 
+endef
+
+# NOTE: $(1) == functionname
+#       $(2) == libraries variablename
+mm_check_libraries=$(call mm_check_resources,$(1),libraries,LIBRARIES,$(2))
+
+# NOTE: $(1) == functionname
+#       $(2) == <mm_add_executable_parameters_t>
+define mm_check_add_executable_parameters_t=
+$(call mm_check_if_defined,$(1),$(2).additionalfiletypes)
+$(call mm_check_if_defined,$(1),$(2).c)
+$(call mm_check_if_defined,$(1),$(2).hFolders)
+$(call mm_check_if_defined,$(1),$(2).lib)
+$(call mm_check_if_defined,$(1),$(2).libFolders)
+$(call mm_check_if_defined,$(1),$(2).libraries)
+$(call mm_check_if_defined,$(1),$(2).staticlibraries)
+$(call mm_check_if_defined,$(1),$(2).sharedlibraries)
+$(call mm_check_if_defined,$(1),$(2).cGcc)
+$(call mm_check_if_defined,$(1),$(2).gcc)
+
+$(call mm_check_if_valid_values,$(1),$(EMMAdditionalexecutablefiletypes_All),$(2).additionalfiletypes)
+$(call mm_check_if_valid_values,$(1),%.c,$(2).c)
+$(call mm_check_lib,$(1),$(2).lib)
+$(call mm_check_libraries,$(1),$(2).libraries)
+$(call mm_check_staticlibraries,$(1),$(2).staticlibraries)
+$(call mm_check_sharedlibraries,$(1),$(2).sharedlib
+endef
+
+#******************************************************************************
+
+# NOTE: $(1) == executablename
+mm_is_executable=$(call mm_is_resource,EXECUTABLE,$(1))
+
+# NOTE: $(1) == executablename
+#       $(2) == <mm_add_executable_parameters_t>
+define mm_add_executable=
+$(if $(filter undefined,$(origin MM_SAFETY)),,\
+	$(if $(filter 1,$(call mm_is_executable,$(1))),$(error attempted to add executable $(1) more than once in $(0)),)\
+	$(call mm_check_add_executable_parameters_t,$(0),$(2))\
+)
+$(eval MM_INFO_PER_EXECUTABLE+=MM_INFO_PER_EXECUTABLE.$(words $(MM_INFO_PER_EXECUTABLE)))
+$(eval mm_add_executable_infoAboutExecutable:=$(lastword $(MM_INFO_PER_EXECUTABLE)))
+$(eval $(mm_add_executable_infoAboutExecutable).name:=$(1))
+$(eval $(mm_add_executable_infoAboutExecutable).o:=$(patsubst %.c,%.o,$($(2).c)))
+$(eval $(mm_add_executable_infoAboutExecutable).libraries:=$(filter $($(2).libraries),$(MM_LIBRARIES)))
+$(eval $(mm_add_executable_infoAboutExecutable).staticlibraries:=$(filter $($(2).staticlibraries),$(MM_STATICLIBARIES)))
+$(eval $(mm_add_executable_infoAboutExecutable).sharedlibraries:=$(filter $($(2).sharedlibraries),$(MM_SHAREDLIBRARIES)))
+$(eval mm_add_executable_a:=$($(mm_add_executable_infoAboutExecutable).libraries) $($(mm_add_executable_infoAboutExecutable).staticlibraries) $($(mm_add_executable_infoAboutExecutable).sharedlibraries))
+$(eval $(mm_add_executable_infoAboutExecutable).lib:=$($(2).lib) $(mm_add_executable_a))
+$(eval $(mm_add_executable_infoAboutExecutable).libFolders:=$($(2).libFolders) $(if $(mm_add_executable_a),./,))
+$(eval $(mm_add_executable_infoAboutExecutable).gcc:=$($(2).gcc))
+$(call mm_add_o_from_c,$(0),$($(2).hFolders),$($(2).cGcc),$($(mm_add_executable_infoAboutExecutable).o))
+$(call mm_add_binary,$(1)$(MM_EXECUTABLE_EXTENSION),$(mm_add_executable_infoAboutExecutable).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath)
+$(if $(OS),,\
+	$(if $(filter EMMAdditionalexecutablefiletypes_Portable,$($(2).additionalfiletypes)),\
+		$(call mm_add_binary,$(1).AppImage,$(2).linux.AppImagefilepath)\
+	,)\
+)
+endef
+# NOTE: ^
+#       "$(if $(mm_add_executable_a),./,)" for libFolders because if any..
+#       .. library in this folder.. -L./ is required for gcc
+
+#******************************************************************************
+#                                    tests
+#******************************************************************************
+
+# NOTE: $(1) == variablename
+define mm_add_test_parameters_t=
+$(eval $(1).executables:=)
+$(eval $(1).scripts:=)
+endef
+# NOTE: ^
+#       .scripts == if windows.. <script>.bat
+#                   if linux.. <script>
+# NOTE: "An executable file starting with an interpreter directive is [...]..
+#       .. called a script",..
+#       .. https://en.wikipedia.org/wiki/Shebang_(Unix)#Etymology
+# NOTE: "A batch file is a script file",..
+#       .. https://en.wikipedia.org/wiki/Batch_file
+# NOTE: all executables and scripts for a test are started in parallel and..
+#       .. the test is only done once all executables and scripts have..
+#       .. exited (or if any executable/script fails)
+
+# NOTE: $(1) == variablename
+define mm_info_about_test_t=
+$(eval $(1).name:=)
+$(eval $(1).filepathPerExecutable:=)
+$(eval $(1).scripts:=)
+endef
+
+MM_INFO_PER_TEST:=
+
+MM_FILEPATH_PER_TESTBINARY:=
+# NOTE: ^
+#       currently only if windows.. .exe/ if linux.. <no extension>
+#       ^
+#       i.e. additional executable types cannot be tests
+
+#*********************************** checks ***********************************
+
+# NOTE: $(1) == functionname
+#       $(2) == <mm_add_test_parameters_t>
+define mm_check_add_test_parameters_t=
+$(call mm_check_if_defined,$(1),$(2).executables)
+$(call mm_check_if_defined,$(1),$(2).scripts)
+endef
+
+#******************************************************************************
+
+# NOTE: $(1) == testname
+mm_is_test=$(call mm_is_resource,TEST,$(1))
+
+# NOTE: $(1) == testname
+#       $(2) == <mm_add_test_parameters_t>
+define mm_add_test=
+$(if $(filter undefined,$(origin MM_SAFETY)),,\
+	$(if $(filter 1,$(call mm_is_test,$(1))),$(error attempted to add test $(1) more than once in $(0)),)\
+	$(call mm_check_add_test_parameters_t,$(0),$(2))\
+)
+$(eval MM_INFO_PER_TEST+=MM_INFO_PER_TEST.$(words $(MM_INFO_PER_TEST)))
+$(eval mm_add_test_infoAboutTest:=$(lastword $(MM_INFO_PER_TEST)))
+$(eval $(mm_add_test_infoAboutTest).name:=$(1))
+$(foreach mm_add_test_executable,$($(2).executables),\
+	$(foreach mm_add_test_infoAboutExecutable,$(MM_INFO_PER_EXECUTABLE),\
+		$(if $(filter $(mm_add_test_executable),$($(mm_add_test_infoAboutExecutable).name)),\
+			$(eval $(mm_add_test_infoAboutTest).filepathPerExecutable+=$($(mm_add_test_infoAboutExecutable).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath))\
+		,)\
+	)\
+)
+$(eval $(mm_add_test_infoAboutTest).scripts:=$($(2).scripts))
+$(if $($(2).executables),$(eval MM_FILEPATH_PER_TESTBINARY+=$($(mm_add_test_infoAboutTest).filepathPerExecutable)),)
 endef
 
 #******************************************************************************
@@ -767,7 +1007,7 @@ MM_RELEASEFILES:=
 MM_RELEASEZIPFILES:=
 MM_RELEASEINSTALLERFILES:=
 
-# NOTE: EMMReleasetype_Zip -> .zip
+# NOTE: EMMReleasetype_Zip -> .<windows/linux>.zip
 #       EMMReleasetype_Installer -> if windows.. .msi
 #                                   if linux.. .deb and .snap
 # NOTE: make release <(zip|installer)>
@@ -849,18 +1089,18 @@ endef
 # NOTE: $(1) == infoAboutOFromC
 define mm_add_o_from_c_target=
 $(if $(OS),.makefile-mini/$($(1).o):.makefile-mini/%.o:%.c,.makefile-mini/$($(1).o):$($(1).c))
-	gcc $($(1).gcc) -o $$@ -c $$< $(addsuffix -I,$($(1).hFolders))
+	gcc $($(1).gcc) -o $$@ -c $$< $(addprefix -I,$($(1).hFolders))
 endef
 
 # NOTE: $(1) == infoAboutLibrary
 define mm_add_staticlibrary_target=
-$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)): $(addprefix .makefile-mini/,$($(1).staticO))
+$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath): $(addprefix .makefile-mini/,$($(1).staticO))
 	ar rcs $$@ $$^
 endef
 
 # NOTE: $(1) == infoAboutLibrary
 define mm_add_sharedlibrary_target=
-$($(1).$(MM_OS)$(MM_SHAREDLIBRARY_EXTENSION)): $(addprefix .makefile-mini/,$($(1).sharedO))
+$($(1).$(MM_OS)$(MM_SHAREDLIBRARY_EXTENSION)filepath): $(addprefix .makefile-mini/,$($(1).sharedO))
 	gcc -shared -o $$@ $$^
 endef
 
@@ -870,12 +1110,59 @@ $(if $(filter EMMLibraryfiletype_Static,$($(1).filetypes)),$(call mm_add_staticl
 $(if $(filter EMMLibraryfiletype_Shared,$($(1).filetypes)),$(call mm_add_sharedlibrary_target,$(1)),)	
 endef
 
+ifndef OS #< linux
+# NOTE: $(1) == infoAboutExecutable
+define mm_add_appimage_target=
+endef
+endif
+
+# NOTE: $(1) == infoAboutExecutable
+define mm_add_executable_targets=
+$($(1).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath): $(addprefix .makefile-mini/,$($(1).o))
+	gcc $($(1).gcc) -o $$@ $$^ $(addprefix -L,$($(1).libFolders)) $(addprefix -l,$($(1).lib))
+endef
+# TODO: ^
+#       .h prerequisites should be order only such that $$^ here still  works
+
+#$(if $(OS),,$\
+#$(if $($(1).linux.appimagefilepath),$(call mm_add_appimage_target))$\
+#)
+
 define mm_add_default_target=
-default:$(MM_NOTIGNOREDBINARIES)
+.PHONY: default
+default: $(MM_NOTIGNOREDBINARIES)
 endef
 
+define mm_add_test_target=
+.PHONY: test
+test: $(MM_FILEPATH_PER_TESTBINARY)
+	$(foreach mm_add_test_target_infoAboutTest,$(MM_INFO_PER_TEST),$\
+	$(foreach mm_add_test_target_executablefilepath,$($(mm_add_test_target_infoAboutTest).filepathPerExecutable),$\
+	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_executablefilepath)$\
+	)$\
+	$(foreach mm_add_test_target_script,$($(mm_add_test_target_infoAboutTest).scripts),$\
+	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_script)$(MM_SCRIPT_EXTENSION)"$\
+	)$\
+	)
+endef
+# NOTE: ^
+#       I tried..
+#       cmd /c "start /b $(mm_add_test_target_script).bat"
+#       .. which caused powershell to keep cmd.exe open after make returned..
+#       .. thus having manually call exit,..
+#       .. https://stackoverflow.com/a/41411671
+#       Start-Job -ScriptBlock { Set-Location $using:pwd; Invoke-Expression..
+#       .. .\$args } -ArgumentList "$(mm_add_test_target_script).bat"
+#       .. was the closest to working solution I found, but it broke the..
+#       .. timeout command that I used to test whether scripts where ran in..
+#       .. parallel, https://stackoverflow.com/a/74843981
+#       ^
+#       Hence for now.. executables and scripts are not run in parallel and..
+#       .. .executables and .scripts is only for grouping tests (for..
+#       .. convenience perhaps?)
+
 define mm_add_releasezip_target=
-$(MM_PROJECTNAME).zip: $(MM_RELEASEZIP)
+$(MM_PROJECTNAME).$(MM_OS).zip: $(MM_RELEASEZIP)
 	$(call mm_cli_zip,$$@,$(MM_RELEASEZIP))
 endef
 
@@ -903,9 +1190,8 @@ $(if $(MM_RELEASEINSTALLER),$(call mm_add_releaseinstaller_targets),)
 
 .PHONY: release
 release: $(MM_RELEASE)
+	@echo Reminder.. did you run "make test" before running "make release"?
 endef
-# TODO: ^
-#       execute test(s) if any
 
 define mm_add_clean_target=
 .PHONY: clean
@@ -943,6 +1229,12 @@ $(foreach mm_add_makefile_infoAboutLibrary,$(MM_INFO_PER_LIBRARY),$\
 $(eval $(call mm_add_library_targets,$(mm_add_makefile_infoAboutLibrary)))$\
 )
 
+$(foreach mm_add_makefile_infoAboutExecutable,$(MM_INFO_PER_EXECUTABLE),$\
+$(eval $(call mm_add_executable_targets,$(mm_add_makefile_infoAboutExecutable)))$\
+)
+
+$(eval $(call mm_add_test_target))
+
 $(if $($(1).releasetypes),\
 	$(eval MM_RELEASEBINARIES:=$(if $($(1).ifRelease.ignoredbinaries),$(call mm_filter_out_using_patterns,$($(1).ifRelease.ignoredbinaries),$(MM_NOTIGNOREDBINARIES)),$(MM_NOTIGNOREDBINARIES)))\
 	$(eval MM_RELEASEFILES_PATTERNS:=$$($(1).ifRelease.additionalfiles))\
@@ -958,9 +1250,9 @@ $(if $($(1).releasetypes),\
 		$(eval MM_RELEASEZIPFILES:=$(if $($(1).ifRelease.ifZip.additionalfiles),$(call mm_filter_using_patterns,$($(1).ifRelease.ifZip.additionalfiles),$(MM_RELEASEFILES)),))\
 		$(eval MM_RELEASEZIP:=$(MM_RELEASEZIPBINARIES) $(MM_RELEASEZIPFILES))\
 		$(if $(MM_RELEASEZIP),\
-			$(eval MM_RELEASE+=$(MM_PROJECTNAME).zip),\
+			$(eval MM_RELEASE+=$(MM_PROJECTNAME).$(MM_OS).zip),\
 			$(if $(filter undefined,$(origin MM_SAFETY)),,\
-				$(info warning: release $(MM_PROJECTNAME).zip is cancelled as no files specified)\
+				$(info warning: release $(MM_PROJECTNAME).$(MM_OS).zip is cancelled as no files specified)\
 			)\
 		)\
 	,)\
