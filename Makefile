@@ -73,11 +73,11 @@ $(call mm_add_executable,executabletest,i)
 
 $(call mm_add_executable_parameters_t,j)
 j.c:=testexecutabletest.c
+j.gcc:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
 #j.libraries:=test-mini:
 j.hFolders:=../test-mini/
 j.lib:=test-mini
 j.libFolders:=../test-mini/
-j.gcc:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
 # ^
 # for sanity.. suffices to read documentation of each library used to figure..
 # .. out what (if anything) to specify here

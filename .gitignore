@@ -3,4 +3,8 @@
 *.spv.h
 *.o
 *.lib
+*.a
 *.dll
+*.so
+*.exe
+executabletest

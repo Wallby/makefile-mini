@@ -229,11 +229,13 @@ endif
 # NOTE: not the same as $(if $(filter $(1),$(2),,) as mm_equals also..
 #       .. returns 1 if both $(1) and $(2) are both empty
 define mm_equals=
+$(eval mm_equals_a:=$(strip $(1)))
+$(eval mm_equals_b:=$(strip $(2)))
 $(eval mm_equals_bAreBothEmpty:=0)
-$(if $(1),,$(if $(2),,$(eval mm_equals_bAreBothEmpty:=1)))
+$(if $(mm_equals_a),,$(if $(mm_equals_b),,$(eval mm_equals_bAreBothEmpty:=1)))
 $(if $(filter 1,$(mm_equals_bAreBothEmpty)),\
 	1,\
-	$(if $(filter $(1),$(2)),1,0)\
+	$(if $(filter $(mm_equals_a),$(mm_equals_b)),1,0)\
 )
 endef
 
@@ -432,6 +434,19 @@ mm_add_binarypart=$(eval MM_BINARYPARTS+=$(1))
 #$(eval .name:=)
 #endef
 
+#*********************************** checks ***********************************
+
+# NOTE: $(1) == functionname
+#       $(2) == resourcetype plural
+#       $(3) == RESOURCETYPE plural
+#       $(4) == resources variablename
+define mm_check_resources=
+$(eval mm_check_resources_a:=$(filter-out $(MM_$(3)),$($(4))))
+$(if $(mm_check_resources_a),$(error $(3) contains element(s) that aren't $(2) in $(1)),)
+endef
+
+#******************************************************************************
+
 # NOTE: $(1) == RESOURCETYPE
 #       $(2) == resourcename
 # NOTE: if there is a resource for which <mm_info_about_resource_t>.name ==..
@@ -445,6 +460,19 @@ $(foreach mm_is_resource_infoAboutResource,$(MM_INFO_PER_$(1)),\
 	,)\
 )
 $(if $(filter 1,$(mm_is_resource_bIsResource)),1,0)
+endef
+
+# NOTE: $(1) == RESOURCETYPE
+#       $(2) == filepath variablename
+#       $(3) == resources
+define mm_get_filepath_per_binary_from_resources=
+$(foreach mm_get_filepath_per_binary_from_resource_resource,$(3),\
+	$(foreach mm_get_filepath_per_binary_from_resource_infoAboutResource,$(MM_INFO_PER_$(1)),\
+		$(if $(filter $($(mm_get_filepath_per_binary_from_resource_infoAboutResource).name),$(mm_get_filepath_per_binary_from_resource_resource)),\
+			$($(mm_get_filepath_per_binary_from_resource_infoAboutResource).$(2))\
+		,)\
+	)\
+)
 endef
 
 #******************************************************************************
@@ -614,13 +642,13 @@ MM_INFO_PER_O_FROM_C:=
 #       $(2) == lib
 define mm_check_lib=
 $(eval mm_check_lib_invalidLib:=)
-$(foreach mm_check_lib_lib,$(2),\
+$(foreach mm_check_lib_lib,$($(2)),\
 	$(if $(findstring .,$(mm_check_lib_lib)),\
 		$(eval mm_check_lib_invalidLib+=$(mm_check_lib_lib))\
 	)\
 )
 $(if $(mm_check_lib_invalidLib),\
-	$(error $(2).lib contains invalid value(s) $(mm_check_lib_invalidLib) in $(1))\
+	$(error $(2) contains invalid value(s) $(mm_check_lib_invalidLib) in $(1))\
 ,)
 endef
 
@@ -681,9 +709,11 @@ $(eval $(1).h:=)
 $(eval $(1).hFolders:=)
 $(eval $(1).lib:=)
 $(eval $(1).libFolders:=)
-$(eval $(1).libraries:=)
 $(eval $(1).cGcc:=)
 $(eval $(1).gcc:=)
+$(eval $(1).libraries:=)
+$(eval $(1).staticlibraries:=)
+$(eval $(1).sharedlibraries:=)
 endef
 # NOTE: ^
 #       .filetypes == empty (i.e. .h only) or one or multiple of..
@@ -709,14 +739,18 @@ $(eval $(1).sharedO:=)
 $(eval $(1).h:=)
 $(eval $(1).lib:=)
 $(eval $(1).libFolders:=)
-$(eval $(1).libraries:=)
 $(eval $(1).gcc:=)
+$(eval $(1).otherLibraries:=)
+$(eval $(1).otherStaticlibraries:=)
+$(eval $(1).otherSharedlibraries:=)
 $(if $(OS),\
 	$(eval $(1).windows.libfilepath:=)\
 	$(eval $(1).windows.dllfilepath:=),\
 	$(eval $(1).linux.afilepath:=)\
 	$(eval $(1).linux.sofilepath:=)\
 )
+$(eval $(1).binaryfilepathPerOtherStaticlibrary:=)
+$(eval $(1).binaryfilepathPerOtherSharedlibrary:=)
 endef
 # NOTE: ^
 #       .staticO == if windows.. <.o>
@@ -735,6 +769,22 @@ MM_LIBRARIES:=
 #*********************************** checks ***********************************
 
 # NOTE: $(1) == functionname
+#       $(2) == libraries variablename
+mm_check_libraries=$(call mm_check_resources,$(1),libraries,LIBRARIES,$(2))
+
+# NOTE: $(1) == functionname
+#       $(2) == <mm_add_*_parameters_t>
+define mm_check_libraries_and_staticlibraries_and_sharedlibraries=
+$(call mm_check_libraries,$(1),$(2).libraries)
+$(call mm_check_libraries,$(1).$(2).staticlibraries)
+$(call mm_check_libraries,$(1).$(2).sharedlibraries)
+$(eval mm_check_libraries_and_staticlibraries_and_sharedlibraries_a:=$(filter $($(2).staticlibraries),$($(2).libraries)))
+$(if $(mm_check_libraries_and_staticlibraries_and_sharedlibraries_a),$(error $(mm_check_libraries_and_staticlibraries_and_sharedlibraries_a) specified both in $(2).libraries and $(2).staticlibraries) in $(1),)
+$(eval mm_check_libraries_and_staticlibraries_and_sharedlibraries_b:=$(filter $($(2).sharedlibraries),$($(2).libraries)))
+$(if $(mm_check_libraries_and_staticlibraries_and_sharedlibraries_b),$(error $(mm_check_libraries_and_staticlibraries_and_sharedlibraries_b) specified both in $(2).libraries and $(2).sharedlibaries) in $(1),)
+endef
+
+# NOTE: $(1) == functionname
 #       $(2) == <mm_add_library_parameters_t>
 define mm_check_add_library_parameters_t=
 $(call mm_check_if_defined,$(1),$(2).filetypes)
@@ -743,9 +793,11 @@ $(call mm_check_if_defined,$(1),$(2).h)
 $(call mm_check_if_defined,$(1),$(2).hFolders)
 $(call mm_check_if_defined,$(1),$(2).lib)
 $(call mm_check_if_defined,$(1),$(2).libFolders)
-$(call mm_check_if_defined,$(1),$(2).libraries)
 $(call mm_check_if_defined,$(1),$(2).cGcc)
 $(call mm_check_if_defined,$(1),$(2).gcc)
+$(call mm_check_if_defined,$(1),$(2).libraries)
+$(call mm_check_if_defined,$(1),$(2).staticlibraries)
+$(call mm_check_if_defined,$(1),$(2).sharedlibraries)
 
 $(if $($(2).filetypes),
 	$(call mm_check_if_valid_values,$(1),$(EMMLibraryfiletype_All),$(2).filetypes)\
@@ -758,6 +810,7 @@ $(if $($(2).filetypes),
 )
 $(call mm_check_if_valid_values,$(1),%.h,$(2).h)
 $(call mm_check_lib,$(1),$(2).lib)
+$(call mm_check_libraries_and_staticlibraries_and_sharedlibraries,$(1),$(2))
 endef
 # TODO: ^
 #       implement .h, .lib, .libFolders, .windows.*, .linux.*
@@ -766,6 +819,11 @@ endef
 
 # NOTE: $(1) == libraryname
 mm_is_library=$(call mm_is_resource,LIBRARY,$(1))
+
+# NOTE: $(1) == staticlibraries
+mm_get_filepath_per_binary_from_staticlibraries=$(call mm_get_filepath_per_binary_from_resources,LIBRARY,$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath,$(1))
+# NOTE: $(1) == sharedlibraries
+mm_get_filepath_per_binary_from_sharedlibraries=$(call mm_get_filepath_per_binary_from_resources,LIBRARY,$(MM_OS)$(MM_SHAREDLIBRARY_EXTENSION)filepath,$(1))
 
 # NOTE: $(1) == libraryname
 #       $(2) == <mm_add_library_parameters_t>
@@ -793,7 +851,14 @@ $(if $(OS),\
 		$(eval $(mm_add_library_infoAboutLibrary).o+=$($(mm_add_library_infoAboutLibrary).sharedO))\
 	,)\
 )
-$(call mm_add_o_from_c,$(0),$($(2).hFolders),$($(2).cGcc),$($(mm_add_library_infoAboutLibrary).o))
+$(eval $(mm_add_library_infoAboutLibrary).otherLibraries:=$(filter $($(2).libraries),$(MM_LIBRARIES)))
+$(eval $(mm_add_library_infoAboutLibrary).otherStaticlibraries:=$(filter $($(2).staticlibraries),$(MM_STATICLIBRARIES)))
+$(eval $(mm_add_library_infoAboutLibrary).otherSharedlibraries:=$(filter $($(2).sharedlibraries),$(MM_SHAREDLIBRARIES)))
+$(eval $(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherStaticlibrary:=$(call mm_get_filepath_per_binary_from_staticlibraries,$($(mm_add_library_infoAboutLibrary).otherStaticlibraries) $($(mm_add_library_infoAboutLibrary).otherLibraries)))
+$(eval $(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherSharedlibrary:=$(call mm_get_filepath_per_binary_from_sharedlibraries,$($(mm_add_library_infoAboutLibrary).otherSharedlibraries) $($(mm_add_library_infoAboutLibrary).otherLibraries)))
+$(eval mm_add_library_a:=$($(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherStaticlibrary) $($(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherSharedlibrary))
+$(eval mm_add_library_b:=$(sort $(notdir,$(mm_add_library_a))))
+$(call mm_add_o_from_c,$(0),$(mm_add_library_b) $($(2).hFolders),$($(2).cGcc),$($(mm_add_library_infoAboutLibrary).o))
 $(if $(filter EMMLibraryfiletype_Static,$($(2).filetypes)),\
 	$(call mm_add_binary,lib$(1)$(MM_STATICLIBRARY_EXTENSION),$(mm_add_library_infoAboutLibrary).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath)\
 ,)
@@ -802,6 +867,8 @@ $(if $(filter EMMLibraryfiletype_Shared,$($(2).filetypes)),\
 ,)
 $(eval MM_LIBRARIES+=$(1))
 endef
+# NOTE: ^
+#       sort after mm_add_library_b:= is for removing duplicates only
 
 #********************************* executable *********************************
 
@@ -819,11 +886,11 @@ $(eval $(1).c:=)
 $(eval $(1).hFolders:=)
 $(eval $(1).lib:=)
 $(eval $(1).libFolders:=)
+$(eval $(1).cGcc:=)
+$(eval $(1).gcc:=)
 $(eval $(1).libraries:=)
 $(eval $(1).staticlibraries:=)
 $(eval $(1).sharedlibraries:=)
-$(eval $(1).cGcc:=)
-$(eval $(1).gcc:=)
 endef
 
 define mm_info_about_executable_t=
@@ -832,15 +899,17 @@ $(eval $(1).additionalfiletypes:=)
 $(eval $(1).o:=)
 $(eval $(1).lib:=)
 $(eval $(1).libFolders:=)
+$(eval $(1).gcc:=)
 $(eval $(1).libraries:=)
 $(eval $(1).staticlibraries:=)
 $(eval $(1).sharedlibraries:=)
-$(eval $(1).gcc:=)
 $(if $(OS),\
 	$(eval $(1).windows.exefilepath:=),\
 	$(eval $(1).linux.filepath:=)\
 	$(eval $(1).linux.AppImagefilepath:=)
 )
+$(eval $(1).binaryfilepathPerStaticlibrary:=)
+$(eval $(1).binaryfilepathPerSharedlibrary:=)
 endef
 # NOTE: ^
 #       .linux.filepath == filepath to executable without extension (<no..
@@ -853,19 +922,6 @@ MM_INFO_PER_EXECUTABLE:=
 #*********************************** checks ***********************************
 
 # NOTE: $(1) == functionname
-#       $(2) == resourcetype plural
-#       $(3) == RESOURCETYPE plural
-#       $(4) == resources variablename
-define mm_check_resources=
-$(eval mm_check_resources_a:=$(filter-out $(MM_$(3)),$($(4))))
-$(if $(mm_check_resources_a),$(error $(3) contains element(s) that aren't $(2) in $(1)) 
-endef
-
-# NOTE: $(1) == functionname
-#       $(2) == libraries variablename
-mm_check_libraries=$(call mm_check_resources,$(1),libraries,LIBRARIES,$(2))
-
-# NOTE: $(1) == functionname
 #       $(2) == <mm_add_executable_parameters_t>
 define mm_check_add_executable_parameters_t=
 $(call mm_check_if_defined,$(1),$(2).additionalfiletypes)
@@ -873,18 +929,16 @@ $(call mm_check_if_defined,$(1),$(2).c)
 $(call mm_check_if_defined,$(1),$(2).hFolders)
 $(call mm_check_if_defined,$(1),$(2).lib)
 $(call mm_check_if_defined,$(1),$(2).libFolders)
+$(call mm_check_if_defined,$(1),$(2).cGcc)
+$(call mm_check_if_defined,$(1),$(2).gcc)
 $(call mm_check_if_defined,$(1),$(2).libraries)
 $(call mm_check_if_defined,$(1),$(2).staticlibraries)
 $(call mm_check_if_defined,$(1),$(2).sharedlibraries)
-$(call mm_check_if_defined,$(1),$(2).cGcc)
-$(call mm_check_if_defined,$(1),$(2).gcc)
 
 $(call mm_check_if_valid_values,$(1),$(EMMAdditionalexecutablefiletypes_All),$(2).additionalfiletypes)
 $(call mm_check_if_valid_values,$(1),%.c,$(2).c)
 $(call mm_check_lib,$(1),$(2).lib)
-$(call mm_check_libraries,$(1),$(2).libraries)
-$(call mm_check_staticlibraries,$(1),$(2).staticlibraries)
-$(call mm_check_sharedlibraries,$(1),$(2).sharedlib
+$(call mm_check_libraries_and_staticlibraries_and_sharedlibraries,$(1),$(2))
 endef
 
 #******************************************************************************
@@ -906,11 +960,17 @@ $(eval $(mm_add_executable_infoAboutExecutable).o:=$(patsubst %.c,%.o,$($(2).c))
 $(eval $(mm_add_executable_infoAboutExecutable).libraries:=$(filter $($(2).libraries),$(MM_LIBRARIES)))
 $(eval $(mm_add_executable_infoAboutExecutable).staticlibraries:=$(filter $($(2).staticlibraries),$(MM_STATICLIBARIES)))
 $(eval $(mm_add_executable_infoAboutExecutable).sharedlibraries:=$(filter $($(2).sharedlibraries),$(MM_SHAREDLIBRARIES)))
-$(eval mm_add_executable_a:=$($(mm_add_executable_infoAboutExecutable).libraries) $($(mm_add_executable_infoAboutExecutable).staticlibraries) $($(mm_add_executable_infoAboutExecutable).sharedlibraries))
-$(eval $(mm_add_executable_infoAboutExecutable).lib:=$($(2).lib) $(mm_add_executable_a))
-$(eval $(mm_add_executable_infoAboutExecutable).libFolders:=$($(2).libFolders) $(if $(mm_add_executable_a),./,))
+$(eval $(mm_add_executable_infoAboutExecutable).binaryfilepathPerStaticlibrary:=$(call mm_get_filepath_per_binary_from_staticlibraries,$($(mm_add_executable_infoAboutExecutable).staticlibraries) $($(mm_add_executable_infoAboutExecutable).libraries)))
+$(eval $(mm_add_executable_infoAboutExecutable).binaryfilepathPerSharedlibrary:=$(call mm_get_filepath_per_binary_from_sharedlibraries,$($(mm_add_executable_infoAboutExecutable).sharedlibraries) $($(mm_add_executable_infoAboutExecutable).libraries)))
+$(eval mm_add_executable_a:=$(patsubst lib%$(MM_STATICLIBRARY_EXTENSION),%,$(notdir $($(mm_add_executable_infoAboutExecutable).binaryfilepathPerStaticlibrary))))
+$(eval mm_add_executable_b:=$(patsubst lib%$(MM_SHAREDLIBRARY_EXTENSION),%,$(notdir $($(mm_add_executable_infoAboutExecutable).binaryfilepathPerSharedlibrary))))
+$(eval mm_add_executable_c:=$(mm_add_executable_a) $(mm_add_executable_b))
+$(eval $(mm_add_executable_infoAboutExecutable).lib:=$(mm_add_executable_c) $($(2).lib))
+$(eval mm_add_executable_d:=$($(mm_add_executable_infoAboutExecutable).binaryfilepathPerStaticlibrary) $($(mm_add_executable_infoAboutExecutable).binaryfilepathPerSharedlibrary))
+$(eval mm_add_executable_e:=$(sort $(dir $(mm_add_executable_d))))
+$(eval $(mm_add_executable_infoAboutExecutable).libFolders:=$(mm_add_executable_e) $($(2).libFolders))
 $(eval $(mm_add_executable_infoAboutExecutable).gcc:=$($(2).gcc))
-$(call mm_add_o_from_c,$(0),$($(2).hFolders),$($(2).cGcc),$($(mm_add_executable_infoAboutExecutable).o))
+$(call mm_add_o_from_c,$(0),$(mm_add_executable_e) $($(2).hFolders),$($(2).cGcc),$($(mm_add_executable_infoAboutExecutable).o))
 $(call mm_add_binary,$(1)$(MM_EXECUTABLE_EXTENSION),$(mm_add_executable_infoAboutExecutable).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath)
 $(if $(OS),,\
 	$(if $(filter EMMAdditionalexecutablefiletypes_Portable,$($(2).additionalfiletypes)),\
@@ -919,8 +979,15 @@ $(if $(OS),,\
 )
 endef
 # NOTE: ^
-#       "$(if $(mm_add_executable_a),./,)" for libFolders because if any..
-#       .. library in this folder.. -L./ is required for gcc
+#       mm_add_executable_e makes sure in libFolders makes sure that -L./..
+#       .. (which is required for gcc) is supplied to gcc too
+# NOTE: ^
+#       sort after mm_add_executable_e:= is only for removing duplicates
+# TODO: ^
+#       $(filter-out $($(2).libraries),$(MM_LIBRARIES)) should be all..
+#       .. assumed to be external, there should be no check in..
+#       .. mm_check_add_executable_parameters_t required as will error..
+#       .. automatically?
 
 #******************************************************************************
 #                                    tests
@@ -1118,7 +1185,7 @@ endif
 
 # NOTE: $(1) == infoAboutExecutable
 define mm_add_executable_targets=
-$($(1).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath): $(addprefix .makefile-mini/,$($(1).o))
+$($(1).$(MM_OS)$(MM_EXECUTABLE_EXTENSION_OR_DOT)filepath): $(addprefix .makefile-mini/,$($(1).o)) $($(1).binaryfilepathPerStaticlibrary) $($(1).binaryfilepathPerSharedlibrary)
 	gcc $($(1).gcc) -o $$@ $$^ $(addprefix -L,$($(1).libFolders)) $(addprefix -l,$($(1).lib))
 endef
 # TODO: ^
@@ -1135,7 +1202,7 @@ endef
 
 define mm_add_test_target=
 .PHONY: test
-test: $(MM_FILEPATH_PER_TESTBINARY)
+test: $(MM_FILEPATH_PER_BINARY)
 	$(foreach mm_add_test_target_infoAboutTest,$(MM_INFO_PER_TEST),$\
 	$(foreach mm_add_test_target_executablefilepath,$($(mm_add_test_target_infoAboutTest).filepathPerExecutable),$\
 	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_executablefilepath)$\
