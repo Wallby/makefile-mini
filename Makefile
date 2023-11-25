@@ -45,59 +45,75 @@ f.c:=staticlibrarytest.c
 $(call mm_add_library,staticlibrarytest,f)
 
 $(call mm_add_library_parameters_t,g)
-g.filetypes:=EMMLibraryfiletype_Shared
-g.c:=sharedlibrarytest.c
-$(call mm_add_library,sharedlibrarytest,g)
+g.filetypes:=EMMLibraryfiletype_Static
+g.cpp:=staticlibrarytest.cpp
+$(call mm_add_library,staticlibrarytest2,g)
 
 $(call mm_add_library_parameters_t,h)
-h.filetypes:=$(EMMLibraryfiletype_All)
-h.c:=staticlibrarytest.c sharedlibrarytest.c
-$(call mm_add_library,librarytest,h)
+h.filetypes:=EMMLibraryfiletype_Shared
+h.c:=sharedlibrarytest.c
+#h.libraries:=sharedlibrary-mini:
+$(call mm_add_library,sharedlibrarytest,h)
 
-$(call mm_add_executable_parameters_t,i)
-#i.additionalfiletypes:=
-# ^
-# default
-i.c:=executabletest.c
-#i.libraries:=staticlibrarytest sharedlibrary-mini:
-i.libraries:=staticlibrarytest sharedlibrarytest
-#i.sharedlibraries:=librarytest
-# ^
-# wouldn't work here as librarytest also includes staticlibrarytest again?,..
-# .. other than that i.libraries:=librarytest would be invalid because..
-# .. ambiguous whether to include static/shared
-i.hFolders:=../sharedlibrary-mini/
-i.lib:=sharedlibrary-mini
-i.libFolders:=../sharedlibrary-mini/
-$(call mm_add_executable,executabletest,i)
+$(call mm_add_library_parameters_t,i)
+i.filetypes:=$(EMMLibraryfiletype_All)
+i.c:=staticlibrarytest.c sharedlibrarytest.c
+$(call mm_add_library,librarytest,i)
 
 $(call mm_add_executable_parameters_t,j)
-j.c:=testexecutabletest.c
-j.gcc:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
-#j.libraries:=test-mini:
-j.hFolders:=../test-mini/
-j.lib:=test-mini
-j.libFolders:=../test-mini/
+#j.additionalfiletypes:=
+# ^
+# default
+j.c:=executabletest.c
+j.libraries:=staticlibrarytest sharedlibrarytest
+#j.sharedlibraries:=librarytest
+# ^
+# wouldn't work here as librarytest also includes staticlibrarytest again?,..
+# .. other than that j.libraries:=librarytest would be invalid because..
+# .. ambiguous whether to include static/shared
+j.hFolders:=../sharedlibrary-mini/
+j.lib:=sharedlibrary-mini
+j.libFolders:=../sharedlibrary-mini/
+$(call mm_add_executable,executabletest,j)
+
+$(call mm_add_executable_parameters_t,k)
+k.cpp:=executabletest.cpp
+k.hppFolders:=../sharedlibrary-mini/
+# NOTE: ^
+#       not sure if wouldn't make more sense to instead use .hFolders for..
+#       .. both c and c++ and .hppFolders only for c++?
+k.libraries:=staticlibrarytest2 sharedlibrarytest
+k.lib=sharedlibrary-mini
+k.libFolders:=../sharedlibrary-mini/
+$(call mm_add_executable,executabletest2,k)
+
+$(call mm_add_executable_parameters_t,l)
+l.c:=testexecutabletest.c
+l.gccOrG++:=-Wl,--wrap=malloc,--wrap=free,--wrap=main
+#l.libraries:=test-mini:
+l.hFolders:=../test-mini/
+l.lib:=test-mini
+l.libFolders:=../test-mini/
 # ^
 # for sanity.. suffices to read documentation of each library used to figure..
 # .. out what (if anything) to specify here
-$(call mm_add_executable,testexecutabletest,j)
+$(call mm_add_executable,testexecutabletest,l)
 
 #*********************************** tests ************************************
 
-$(call mm_add_test_parameters_t,k)
-k.executables:=testexecutabletest
-k.scripts=testscripttest
-$(call mm_add_test,test,k)
+$(call mm_add_test_parameters_t,m)
+m.executables:=testexecutabletest
+m.scripts=testscripttest
+$(call mm_add_test,test,m)
 
 #******************************************************************************
 
-$(call mm_stop_parameters_t,l)
-l.releasetypes:=EMMReleasetype_Zip
-#l.releasetypes:=EMMReleasetype_Zip EMMReleasetype_Installer
-l.ifRelease.ignoredbinaries:=^liblibrarytest$(MM_SHAREDLIBRARY_EXTENSION)$$
-l.ifRelease.ifZip.additionalfiles:=.txt$$ .md$$
+$(call mm_stop_parameters_t,n)
+n.releasetypes:=EMMReleasetype_Zip
+#n.releasetypes:=EMMReleasetype_Zip EMMReleasetype_Installer
+n.ifRelease.ignoredbinaries:=^liblibrarytest$(MM_SHAREDLIBRARY_EXTENSION)$$
+n.ifRelease.ifZip.additionalfiles:=.txt$$ .md$$
 # ^
 # additionally include every .txt and .md file in .zip
-#l.ifRelease.ifInstaller.additionalfiles:=
-$(call mm_stop,l)
+#n.ifRelease.ifInstaller.additionalfiles:=
+$(call mm_stop,n)
