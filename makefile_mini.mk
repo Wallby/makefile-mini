@@ -1109,12 +1109,6 @@ endef
 
 MM_INFO_PER_TEST:=
 
-MM_FILEPATH_PER_TESTBINARY:=
-# NOTE: ^
-#       currently only if windows.. .exe/ if linux.. <no extension>
-#       ^
-#       i.e. additional executable types cannot be tests
-
 #*********************************** checks ***********************************
 
 # NOTE: $(1) == functionname
@@ -1147,7 +1141,6 @@ $(foreach mm_add_test_executable,$($(2).executables),\
 	)\
 )
 $(eval $(mm_add_test_infoAboutTest).scripts:=$($(2).scripts))
-$(if $($(2).executables),$(eval MM_FILEPATH_PER_TESTBINARY+=$($(mm_add_test_infoAboutTest).filepathPerExecutable)),)
 endef
 
 #******************************************************************************
