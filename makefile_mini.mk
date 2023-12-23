@@ -1593,4 +1593,4 @@ endef
 # NOTE: ^
 #       $(if $(MM_RELEASE*),,$(eval MM_RELEASE:=$(filter-out <..>,$(MM_RELEASE))))
 #       ^
-#       if releasetype specified but no files.. don't make reelase
+#       if releasetype specified but no files.. don't make release
