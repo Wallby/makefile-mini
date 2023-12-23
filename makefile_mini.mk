@@ -685,13 +685,19 @@ $(foreach mm_add_o_from_c_or_cpp_o,$(8),\
 		$(eval mm_add_o_from_c_or_cpp_cOrCpp:=$(basename $(mm_add_o_from_c_or_cpp_o))),\
 		$(eval mm_add_o_from_c_or_cpp_cOrCpp:=$(basename $(basename $(mm_add_o_from_c_or_cpp_o))))\
 	)\
+	$(eval mm_add_o_from_c_or_cpp_gccOrG++:=$(7))\
+	$(if $(OS),,\
+		$(if $(patsubst %.shared.o,%,$(mm_add_o_from_c_or_cpp_gccOrG++)),\
+			$(eval mm_add_o_from_c_or_cpp_gccOrG++ +=-fpic -fvisibility=hidden)\
+		,)\
+	)\
 	$(eval mm_add_o_from_c_or_cpp_bIsOFromCOrCpp:=0)\
 	$(foreach mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp,$(MM_INFO_PER_O_FROM_$(2)),\
 		$(if $(filter $($(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).o),$(mm_add_o_from_c_or_cpp_o)),\
 			$(if $(filter 0,$(call mm_equals,$($(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(4)Folders),$(6))),\
 				$(error $(mm_add_o_from_c_or_cpp_o) required more than once but with different $(4)Folders value in $(1))\
 			,)\
-			$(if $(filter 0,$(call mm_equals,$($(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(5)),$(7))),\
+			$(if $(filter 0,$(call mm_equals,$($(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(5)),$(mm_add_o_from_c_or_cpp_gccOrG++))),\
 				$(error $(mm_add_o_from_c_or_cpp_o) required more than once but with different $(5) value in $(1))\
 			,)\
 			$(eval mm_add_o_from_c_or_cpp_bIsOFromCOrCpp:=1)\
@@ -703,15 +709,15 @@ $(foreach mm_add_o_from_c_or_cpp_o,$(8),\
 		$(call mm_info_about_o_from_c_or_cpp_t,$(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp))\
 		$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(3):=$(mm_add_o_from_c_or_cpp_cOrCpp))\
 		$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(4)Folders:=$(6))\
-		$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(5):=$(7))\
-		$(if $(OS),,\
-			$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(5)+=-fpic -visibility=hidden)\
-		)\
+		$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).$(5):=$(mm_add_o_from_c_or_cpp_gccOrG++))\
 		$(eval $(mm_add_o_from_c_or_cpp_infoAboutOFromCOrCpp).o:=$(mm_add_o_from_c_or_cpp_o))\
 		$(call mm_add_binarypart,$(mm_add_o_from_c_or_cpp_o))\
 	,)\
 )
 endef
+# NOTE: ^
+#       though not possible that "-fpic -fvisibilty=hidden" for .shared.o is..
+#       .. ever an issue, adding it here before checking for sanity
 
 # NOTE: $(1) == functionname
 #       $(2) == .hFolders
