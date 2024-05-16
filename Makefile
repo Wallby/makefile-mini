@@ -41,7 +41,7 @@ $(call mm_add_library,headerlibrarytest,e)
 $(call mm_add_library_parameters_t,f)
 f.filetypes:=EMMLibraryfiletype_Static
 f.c:=staticlibrarytest.c
-f.localC:=a/a.c
+f.localC:=foldertest/foldertest.c
 # no "f.o" as .o is not cross platform (unlike e.g. .spv)
 $(call mm_add_library,staticlibrarytest,f)
 
@@ -59,7 +59,7 @@ $(call mm_add_library,sharedlibrarytest,h)
 $(call mm_add_library_parameters_t,i)
 i.filetypes:=$(EMMLibraryfiletype_All)
 i.c:=staticlibrarytest.c sharedlibrarytest.c
-i.localC:=a/a.c
+i.localC:=foldertest/foldertest.c
 $(call mm_add_library,librarytest,i)
 
 $(call mm_add_executable_parameters_t,j)

@@ -1,11 +1,11 @@
 #include "headertest.h"
 
-#include "a/a.h"
+#include "foldertest/foldertest.h"
 
 
 int staticlibrarytest()
 {
-	a();
+	foldertest();
 
 	return HEADERTEST;
 }
