@@ -124,7 +124,7 @@ MM_EXECUTABLE_EXTENSION_OR_DOT:=$(if $(MM_EXECUTABLE_EXTENSION),$(MM_EXECUTABLE_
 
 ifndef OS #< linux
 # NOTE: $(1) = non cli (see windows version of mm_cli_mkdir)
-mm_cli_mkdir=mkdir $(1)
+mm_cli_mkdir=mkdir -p $(1)
 # TODO: not tested
 # NOTE: $(1) == non cli (see windows version of mm_cli_rmdir)
 mm_cli_rmdir=rmdir $(1)
@@ -1007,7 +1007,7 @@ $(eval $(mm_add_library_infoAboutLibrary).otherSharedlibraries:=$(filter $($(2).
 $(eval $(mm_add_library_infoAboutLibrary).hAndHppFilepathPerOtherLibrary:=$(call mm_get_filepath_per_h_and_hpp_from_libraries,$($(mm_add_library_infoAboutLibrary).otherLibraries)))
 $(eval $(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherStaticlibrary:=$(call mm_get_filepath_per_binary_from_staticlibraries,$($(mm_add_library_infoAboutLibrary).otherStaticlibraries) $($(mm_add_library_infoAboutLibrary).otherLibraries)))
 $(eval $(mm_add_library_infoAboutLibrary).binaryfilepathPerOtherSharedlibrary:=$(call mm_get_filepath_per_binary_from_sharedlibraries,$($(mm_add_library_infoAboutLibrary).otherSharedlibraries) $($(mm_add_library_infoAboutLibrary).otherLibraries)))
-$(eval mm_add_library_a:=$(sort $(notdir,$($(mm_add_library_infoAboutLibrary).hAndHppFilepathPerOtherLibrary))))
+$(eval mm_add_library_a:=$(sort $(dir $($(mm_add_library_infoAboutLibrary).hAndHppFilepathPerOtherLibrary))))
 $(if $(mm_add_library_oFromC),\
 	$(call mm_add_o_from_c,$(0),$(mm_add_library_a) $($(2).hAndHppFolders) $($(2).hFolders),$($(2).cGcc),$(mm_add_library_oFromC) $(mm_add_library_oFromLocalC))\
 ,)
@@ -1130,8 +1130,12 @@ $(if $(filter undefined,$(origin MM_SAFETY)),,\
 $(eval MM_INFO_PER_EXECUTABLE+=MM_INFO_PER_EXECUTABLE.$(words $(MM_INFO_PER_EXECUTABLE)))
 $(eval mm_add_executable_infoAboutExecutable:=$(lastword $(MM_INFO_PER_EXECUTABLE)))
 $(eval $(mm_add_executable_infoAboutExecutable).name:=$(1))
-$(eval mm_add_executable_oFromC:=$(addsuffix .o,$($(2).c)))
-$(eval mm_add_executable_oFromCpp:=$(addsuffix .o,$($(2).cpp)))
+$(if $(OS),\
+	$(eval mm_add_executable_oFromC:=$(addsuffix .o,$($(2).c)))\
+	$(eval mm_add_executable_oFromCpp:=$(addsuffix .o,$($(2).cpp))),\
+	$(eval mm_add_executable_oFromC:=$(addsuffix .static.o,$($(2).c)))\
+	$(eval mm_add_executable_oFromCpp:=$(addsuffix .static.o,$($(2).cpp)))\
+)
 $(eval $(mm_add_executable_infoAboutExecutable).o:=$(mm_add_executable_oFromC) $(mm_add_executable_oFromCpp))
 $(eval $(mm_add_executable_infoAboutExecutable).libraries:=$(filter $($(2).libraries),$(MM_LIBRARIES)))
 $(eval $(mm_add_executable_infoAboutExecutable).staticlibraries:=$(filter $($(2).staticlibraries),$(MM_STATICLIBARIES)))
