@@ -54,13 +54,20 @@ $(call mm_add_library_parameters_t,h)
 h.filetypes:=EMMLibraryfiletype_Shared
 h.c:=sharedlibrarytest.c
 #h.libraries:=sharedlibrary-mini:
+h.hFolders:=../sharedlibrary-mini/
 $(call mm_add_library,sharedlibrarytest,h)
 
 $(call mm_add_library_parameters_t,i)
 i.filetypes:=$(EMMLibraryfiletype_All)
 i.c:=staticlibrarytest.c sharedlibrarytest.c
 i.localC:=foldertest/foldertest.c
-$(call mm_add_library,librarytest,i)
+#i.libraries:=sharedlibrary-mini:
+i.hFolders:=../sharedlibrary-mini/
+#$(call mm_add_library,librarytest,i)
+# NOTE: ^
+#       disabled as currently won't work to add staticlibrarytest.c twice..
+#       .. with different hFolders value (librarytest is currently unused..
+#       .. anyway)
 
 $(call mm_add_executable_parameters_t,j)
 #j.additionalfiletypes:=
@@ -76,15 +83,29 @@ j.libraries:=staticlibrarytest sharedlibrarytest
 j.hFolders:=../sharedlibrary-mini/
 j.lib:=sharedlibrary-mini
 j.libFolders:=../sharedlibrary-mini/
+# TODO: ^
+#       see mm_add_executable_parameters_t for executabletest2 for more info..
+#       .. (applies here too)
 $(call mm_add_executable,executabletest,j)
 
 $(call mm_add_executable_parameters_t,k)
 k.cpp:=executabletest.cpp
 k.hppFolders:=../sharedlibrary-mini/
 # NOTE: ^
-#       not sure if wouldn't make more sense to instead use .hFolders for..
-#       .. both c and c++ and .hppFolders only for c++?
+#       could use hAndHppFolders here but there is no .c here hence this is..
+#       .. "more-specific"
+# TODO: ^
+#       not sure if requiring sharedlibrarytest should also automatically..
+#       .. require sharedlibrary-mini added to .hppFolders?
+#       alternative might be to add sharedlibrary-mini: here AGAIN (to..
+#       .. k.libraries) for also including .hppFolders?
+# TODO: ^
+#       maybe sharedlibrarytest should specify .hpm or .hAndHpp for..
+#       .. automatically being added to .hAndHppFolders?
 k.libraries:=staticlibrarytest2 sharedlibrarytest
+# TODO: ^
+#       requiring sharedlibrarytest should automatically require..
+#       .. sharedlibrary-mini
 k.lib=sharedlibrary-mini
 k.libFolders:=../sharedlibrary-mini/
 $(call mm_add_executable,executabletest2,k)

@@ -127,7 +127,9 @@ ifndef OS #< linux
 mm_cli_mkdir=mkdir -p $(1)
 # TODO: not tested
 # NOTE: $(1) == non cli (see windows version of mm_cli_rmdir)
-mm_cli_rmdir=rmdir $(1)
+mm_cli_rmdir=rm -d -f $(1)
+# NOTE: ^
+#       not using rmdir because that will error if folder doesn't exist
 
 mm_cli_rm=rm -f $(1)
 
@@ -209,11 +211,18 @@ ifndef OS #< linux
 #       $(2) == inputfile (cli)
 #       $(3) == outputfile (cli)
 define mm_cli_hfile_from_file=
-$(eval mm_cli_hfile_from_file_a:=$(shell tr -c a-zA-Z0-9 _ $(1)))
-$(eval mm_cli_hfile_from_file_b:=$(shell tr a-z A-Z $(mm_cli_hfile_from_file_a)))
-echo #ifndef $(mm_hfile_from_file_b)_H`n#define $(mm_cli_hfile_from_file_b)_H`n`n`nchar $(mm_cli_hfile_from_file_a)_h[] = {\" > $(3)
-od -An -v -td1 $(2) | tr -s " " | tr -d "\n" | sed -z -e "s/ /, /g;s/^, //;s/, $ //" >> $(3)
-echo \"`n`n#endif`n\" >> $(3)
+$(strip\
+	$(eval $(0)_a:=$(shell echo -n $(1) | tr -c a-zA-Z0-9 _))\
+	$(eval $(0)_b:=$(shell echo -n $($(0)_a) | tr a-z A-Z))\
+	echo "#ifndef $($(0)_b)_H" > $(3);\
+	echo "#define $($(0)_b)_H" >> $(3);\
+	echo >> $(3); echo >> $(3);\
+	echo -n "char $($(0)_a)_h[] = { " >> $(3);\
+	od -An -v -td1 $(2) | tr -s " " | tr -d "\n" | sed -z -e "s/ /, /g;s/^, //;s/, $$$$//" >> $(3);\
+	echo " };" >> $(3);\
+	echo >> $(3);\
+	echo "#endif" >> $(3)\
+)
 endef
 # NOTE: ^
 #       https://unix.stackexchange.com/a/758531
@@ -728,7 +737,7 @@ $(foreach mm_add_o_from_c_or_cpp_o,$(8),\
 	)\
 	$(eval mm_add_o_from_c_or_cpp_gccOrG++:=$(7))\
 	$(if $(OS),,\
-		$(if $(patsubst %.shared.o,%,$(mm_add_o_from_c_or_cpp_gccOrG++)),\
+		$(if $(filter %.shared.o,$($(0)_o)),\
 			$(eval mm_add_o_from_c_or_cpp_gccOrG++ +=-fpic -fvisibility=hidden)\
 		,)\
 	)\
@@ -915,7 +924,7 @@ $(call mm_check_if_defined,$(1),$(2).libraries)
 $(call mm_check_if_defined,$(1),$(2).staticlibraries)
 $(call mm_check_if_defined,$(1),$(2).sharedlibraries)
 
-$(if $($(2).filetypes),
+$(if $($(2).filetypes),\
 	$(call mm_check_if_valid_values,$(1),$(EMMLibraryfiletype_All),$(2).filetypes)\
 	$(if $($(2).c) $($(2).cpp),,$(error if $(2).filetypes is not empty.. $(2).c and $(2).cpp may not both be empty in $(1)))\
 	$(call mm_check_if_valid_values,$(1),%.c,$(2).c)\
@@ -997,7 +1006,7 @@ $(if $(OS),\
 		$(eval mm_add_library_oFromLocalCpp+=$(mm_add_library_sharedOFromLocalCpp))\
 	,)\
 )
-$(eval $(mm_add_library_infoAboutLibrary).localStaticO:=$(mm_add_library_oFromLocalC) $(mm_add_library_oFromLocalCpp))
+$(eval $(mm_add_library_infoAboutLibrary).localStaticO:=$($(0)_staticOFromLocalC) $($(0)_staticOFromLocalCpp))
 $(eval $(mm_add_library_infoAboutLibrary).h:=$($(2).h))
 $(eval $(mm_add_library_infoAboutLibrary).hpp:=$($(2).hpp))
 $(eval $(mm_add_library_infoAboutLibrary).cc:=$(if $($(2).cpp),g++,gcc))
@@ -1031,6 +1040,9 @@ endef
 # TODO: mm_not_add_library and mm_add_library=$(eval $(call mm_not_add_library,<...>))?
 #       ^
 #       to allow for comments in mm_not_add_library?
+# NOTE: ^
+#       for shared library .localC is identical to .c
+#       this is fine as default visibility for .shared.o is hidden?
 
 #********************************* executable *********************************
 
@@ -1354,13 +1366,13 @@ endef
 
 # NOTE: $(1) == infoAboutLibrary
 define mm_add_local_staticlibrary_targets=
-$(eval mm_add_staticlibrary_targets_filepathPerLocalStaticO:=$(addprefix .makefile-mini/,$($(1).localStaticO)))
-.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).nm:$(mm_add_staticlibrary_targets_filepathPerLocalStaticO)
+$(eval $(0)_filepathPerLocalStaticO:=$(addprefix .makefile-mini/,$($(1).localStaticO)))
+.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).nm:$($(0)_filepathPerLocalStaticO)
 	nm -j -g --defined-only $$^ > $$@
 
-$(eval mm_add_staticlibrary_targets_filepathPerStaticO:=$(addprefix .makefile-mini/,$($(1).staticO)))
-.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).o:.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).nm $(mm_add_staticlibrary_targets_filepathPerStaticO)
-	ld -r -o $$@ $(mm_add_staticlibrary_targets_filepathPerStaticO)
+$(eval $(0)_filepathPerStaticO:=$(addprefix .makefile-mini/,$($(1).staticO)))
+.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).o:.makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).nm $($(0)_filepathPerStaticO)
+	ld -r -o $$@ $($(0)_filepathPerStaticO)
 	objcopy --localize-symbols $$< $$@
 
 $($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath): .makefile-mini/$($(1).$(MM_OS)$(MM_STATICLIBRARY_EXTENSION)filepath).o $($(1).hAndHppFilepathPerOtherLibrary)
@@ -1438,10 +1450,11 @@ define mm_add_test_target=
 test: $(MM_FILEPATH_PER_BINARY)
 	$(foreach mm_add_test_target_infoAboutTest,$(MM_INFO_PER_TEST),$\
 	$(foreach mm_add_test_target_executablefilepath,$($(mm_add_test_target_infoAboutTest).filepathPerExecutable),$\
-	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_executablefilepath)$\
+	$(eval $(0)_a:=$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_executablefilepath))$\
+	$(MM_NEWLINE)	@$(if $(OS),,export LD_LIBRARY_PATH=$$$$LD_LIBRARY_PATH:./:.makefile-mini/; )$($(0)_a);echo $($(0)_a)$\
 	)$\
 	$(foreach mm_add_test_target_script,$($(mm_add_test_target_infoAboutTest).scripts),$\
-	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_script)$(MM_SCRIPT_EXTENSION)"$\
+	$(MM_NEWLINE)	$(if $(findstring /,$(mm_add_test_target_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$(mm_add_test_target_script)$(MM_SCRIPT_EXTENSION)$\
 	)$\
 	)
 endef
@@ -1460,6 +1473,15 @@ endef
 #       Hence for now.. executables and scripts are not run in parallel and..
 #       .. .executables and .scripts is only for grouping tests (for..
 #       .. convenience perhaps?)
+# NOTE: ^
+#       make automatically adds environment variables as Makefile variables..
+#       .. (hence $(LD_LIBRARY_PATH) works) and runs each line using a new..
+#       .. shell (separate c stdlib system function call?), hence export..
+#       .. LD_LIBRARY_PATH=<..> on same line as running executable here
+#       currently hidden that makefile-mini does this for clearer output
+# TODO: this solution won't work if a test executable uses any external..
+#       .. sharedlibrary/runs any executable that requires an external..
+#       .. sharedlibrary
 
 define mm_add_releasezip_target=
 $(MM_PROJECTNAME).$(MM_OS).zip: $(MM_RELEASEZIP)

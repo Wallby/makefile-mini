@@ -1,3 +1,5 @@
+#include "pixelshadertest.spv.h" //< to test if a valid .h file was generated
+
 #include <test_mini.h>
 
 #include <stdio.h>
@@ -5,8 +7,10 @@
 
 #if defined(_WIN32)
 #define FOLDER_SEPARATOR "\\"
+#define EXECUTABLE_EXTENSION ".exe"
 #elif defined(__linux__)
 #define FOLDER_SEPARATOR "/"
+#define EXECUTABLE_EXTENSION ""
 #else
 #error os not supported
 #endif
@@ -64,8 +68,8 @@ int test_1()
 
 int test_2()
 {
-	fputs("." FOLDER_SEPARATOR "executabletest.exe\n", stdout);
-	int a = system("." FOLDER_SEPARATOR "executabletest.exe");
+	fputs("." FOLDER_SEPARATOR "executabletest" EXECUTABLE_EXTENSION "\n", stdout);
+	int a = system("." FOLDER_SEPARATOR "executabletest" EXECUTABLE_EXTENSION);
 	if(a != 0)
 	{
 		return a;
