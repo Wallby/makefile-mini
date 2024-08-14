@@ -1451,7 +1451,7 @@ test: $(MM_FILEPATH_PER_BINARY)
 	$(foreach $(0)_infoAboutTest,$(MM_INFO_PER_TEST),$\
 	$(foreach $(0)_executablefilepath,$($($(0)_infoAboutTest).filepathPerExecutable),$\
 	$(eval $(0)_a:=$(if $(findstring /,$($(0)_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$($(0)_executablefilepath))$\
-	$(MM_NEWLINE)	@$(if $(OS),,export LD_LIBRARY_PATH=$$$$LD_LIBRARY_PATH:./:.makefile-mini/; )$($(0)_a);echo $($(0)_a)$\
+	$(MM_NEWLINE)	@echo $($(0)_a);$(if $(OS),,export LD_LIBRARY_PATH=$$$$LD_LIBRARY_PATH:./:.makefile-mini/; )$($(0)_a)$\
 	)$\
 	$(foreach $(0)_script,$($($(0)_infoAboutTest).scripts),$\
 	$(MM_NEWLINE)	$(if $(findstring /,$($(0)_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$($(0)_script)$(MM_SCRIPT_EXTENSION)$\
