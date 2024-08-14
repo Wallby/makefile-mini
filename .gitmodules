@@ -1,0 +1,6 @@
+[submodule "sharedlibrary-mini"]
+	path = sharedlibrary-mini
+	url = https://github.com/Wallby/sharedlibrary-mini.git
+[submodule "test-mini"]
+	path = test-mini
+	url = https://github.com/Wallby/test-mini.git
