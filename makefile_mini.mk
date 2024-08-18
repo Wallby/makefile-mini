@@ -1,4 +1,4 @@
-MAKEFILE_MINI_VERSION:=0.1.1
+MAKEFILE_MINI_VERSION:=0.1.2
 
 # usage..
 # make #< default target makes all not ignored binaries
@@ -1453,10 +1453,11 @@ test: $(MM_FILEPATH_PER_BINARY)
 	$(foreach $(0)_infoAboutTest,$(MM_INFO_PER_TEST),$\
 	$(foreach $(0)_executablefilepath,$($($(0)_infoAboutTest).filepathPerExecutable),$\
 	$(eval $(0)_a:=$(if $(findstring /,$($(0)_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$($(0)_executablefilepath))$\
-	$(MM_NEWLINE)	@$(if $(OS),,export LD_LIBRARY_PATH=$$$$LD_LIBRARY_PATH:./:.makefile-mini/; )$($(0)_a);echo $($(0)_a)$\
+	$(eval $(0)_b:=@export LD_LIBRARY_PATH=$$$$LD_LIBRARY_PATH:./:.makefile-mini/; $($(0)_a); echo $($(0)_a))$\
+	$(MM_NEWLINE)	$(if $(OS),$($(0)_a),$($(0)_b))$\
 	)$\
 	$(foreach $(0)_script,$($($(0)_infoAboutTest).scripts),$\
-	$(MM_NEWLINE)	$(if $(findstring /,$($(0)_executablefilepath)),,.$(MM_FOLDER_SEPARATOR))$($(0)_script)$(MM_SCRIPT_EXTENSION)$\
+	$(MM_NEWLINE)	.$(MM_FOLDER_SEPARATOR)$($(0)_script)$(MM_SCRIPT_EXTENSION)$\
 	)$\
 	)
 endef
